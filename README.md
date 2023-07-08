@@ -165,9 +165,9 @@ Datasets from [MoleculeNet](https://moleculenet.org/) and a 450K subset of ChEMB
 
 To train a model, run:
 ```
-chemprop_train --data_path <path> --dataset_type <type> --save_dir <dir>
+chemprop_train --data_path <path> --dataset_type <type> --save_dir <dir> --figureprint <type>
 ```
-where `<path>` is the path to a CSV file containing a dataset, `<type>` is one of [classification, regression, multiclass, spectra] depending on the type of the dataset, and `<dir>` is the directory where model checkpoints will be saved.
+where `<path>` is the path to a CSV file containing a dataset, `<type>` is one of [classification, regression, multiclass, spectra] depending on the type of the dataset, and `<dir>` is the directory where model checkpoints will be saved. figureprint containing "atom", "mol" and "hyper".
 
 For example:
 ```
