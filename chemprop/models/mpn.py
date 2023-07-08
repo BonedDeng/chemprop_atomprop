@@ -72,7 +72,7 @@ class MPNEncoder(nn.Module):
             self.bond_descriptors_size = args.bond_descriptors_size
             self.bond_descriptors_layer = nn.Linear(self.hidden_size + self.bond_descriptors_size,
                                                     self.hidden_size + self.bond_descriptors_size,)
-
+        self.character = args.figureprint
     def forward(self,
                 mol_graph: BatchMolGraph,
                 atom_descriptors_batch: List[np.ndarray] = None,
@@ -175,24 +175,69 @@ class MPNEncoder(nn.Module):
             return atom_hiddens, a_scope, bond_hiddens, b_scope, b2br  # num_atoms x hidden, remove the first one which is zero padding
 
         mol_vecs = []
-        for i, (a_start, a_size) in enumerate(a_scope):
-            if a_size == 0:
-                mol_vecs.append(self.cached_zero_vector)
-            else:
-                cur_hiddens = atom_hiddens.narrow(0, a_start, a_size)
-                mol_vec = cur_hiddens  # (num_atoms, hidden_size)
-                if self.aggregation == 'mean':
-                    mol_vec = mol_vec.sum(dim=0) / a_size
-                elif self.aggregation == 'sum':
-                    mol_vec = mol_vec.sum(dim=0)
-                elif self.aggregation == 'norm':
-                    mol_vec = mol_vec.sum(dim=0) / self.aggregation_norm
-                mol_vecs.append(mol_vec)
+        if self.character == "atom":
+            j = 0
+            for i, (a_start, a_size) in enumerate(a_scope):
+                if a_size == 0:
+                    mol_vecs.append(self.cached_zero_vector)
+                else:
+                    # cur_hiddens = atom_hiddens.narrow(0, a_start, a_size)
+                    mol_vec = atom_hiddens  # (num_atoms, hidden_size)
+                    mol_vecs.append(mol_vec)
+                    j = i
 
-        mol_vecs = torch.stack(mol_vecs, dim=0)  # (num_molecules, hidden_size)
+            mol_vecs = torch.cat(mol_vecs, dim=0)  # (num_molecules, hidden_size)
+            return mol_vecs, a_scope  # num_molecules x hidden
+        elif self.character == "mol":
+            mol_vecs = []
+            for i, (a_start, a_size) in enumerate(a_scope):
+                if a_size == 0:
+                    mol_vecs.append(self.cached_zero_vector)
+                else:
+                    cur_hiddens = atom_hiddens.narrow(0, a_start, a_size)
+                    mol_vec = cur_hiddens  # (num_atoms, hidden_size)
+                    if self.aggregation == 'mean':
+                        mol_vec = mol_vec.sum(dim=0) / a_size
+                    elif self.aggregation == 'sum':
+                        mol_vec = mol_vec.sum(dim=0)
+                    elif self.aggregation == 'norm':
+                        mol_vec = mol_vec.sum(dim=0) / self.aggregation_norm
+                    mol_vecs.append(mol_vec)
 
-        return mol_vecs  # num_molecules x hidden
+            mol_vecs = torch.stack(mol_vecs, dim=0)  # (num_molecules, hidden_size)
 
+            return mol_vecs, a_scope  # num_molecules x hidden
+        elif self.character == "hyper":
+            atom_vecs = []
+            mol_vecs = []
+            for i, (a_start, a_size) in enumerate(a_scope):
+                if a_size == 0:
+                    mol_vecs.append(self.cached_zero_vector)
+                else:
+                    cur_hiddens = atom_hiddens.narrow(0, a_start, a_size)
+                    mol_vec = cur_hiddens  # (num_atoms, hidden_size)
+                    if self.aggregation == 'mean':
+                        mol_vec = mol_vec.sum(dim=0) / a_size
+                    elif self.aggregation == 'sum':
+                        mol_vec = mol_vec.sum(dim=0)
+                    elif self.aggregation == 'norm':
+                        mol_vec = mol_vec.sum(dim=0) / self.aggregation_norm
+                    mol_vecs.append(mol_vec)
+
+            mol_vecs = torch.stack(mol_vecs, dim=0)  # (num_molecules, hidden_size)
+
+            for j, (b_start, b_size) in enumerate(a_scope):
+                if a_size == 0:
+                    mol_vecs.append(self.cached_zero_vector)
+                else:
+                    # cur_hiddens = atom_hiddens.narrow(0, b_start, a_size)
+                    atom_vec = atom_hiddens  # (num_atoms, hidden_size)
+                    len, _ = atom_vec.shape
+                    atom_vecs.append(atom_vec)
+
+
+            atom_vecs = torch.cat(atom_vecs, dim=0)  # (num_molecules, hidden_size)
+            return mol_vecs, atom_vecs, a_scope # num_molecules x hidden
 
 class MPN(nn.Module):
     """An :class:`MPN` is a wrapper around :class:`MPNEncoder` which featurizes input as needed."""
