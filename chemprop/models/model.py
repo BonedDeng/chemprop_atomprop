@@ -12,6 +12,21 @@ from chemprop.features import BatchMolGraph
 from chemprop.nn_utils import initialize_weights
 
 
+# class MLP(nn.Module):
+#     def __init__(self, input_size, hidden_size, output_size):
+#         super(MLP, self).__init__()
+
+#         self.fc1 = nn.Linear(input_size, hidden_size)
+#         self.relu = nn.ReLU()
+#         self.fc2 = nn.Linear(hidden_size, output_size)
+
+#     def forward(self, x):
+#         out = self.fc1(x)
+#         out = self.relu(out)
+#         out = self.fc2(out)
+#         return out
+
+
 class MoleculeModel(nn.Module):
     """A :class:`MoleculeModel` is a model which contains a message passing network following by feed-forward layers."""
 
@@ -74,6 +89,13 @@ class MoleculeModel(nn.Module):
         self.create_ffn(args)
 
         initialize_weights(self)
+        input_size = 20
+        hidden_size = 32
+        output_size = 1
+
+        # 创建 MLP 网络实例
+        self.mlp = MLP(input_size, hidden_size, output_size)
+        self.character = args.figureprint
 
     def create_encoder(self, args: TrainArgs) -> None:
         """
@@ -232,6 +254,8 @@ class MoleculeModel(nn.Module):
         else:
             raise ValueError(f"Unsupported fingerprint type {fingerprint_type}.")
 
+
+
     def forward(
         self,
         batch: Union[
@@ -264,27 +288,109 @@ class MoleculeModel(nn.Module):
         :param bond_types_batch: A list of PyTorch tensors storing bond types of each bond determined by RDKit molecules.
         :return: The output of the :class:`MoleculeModel`, containing a list of property predictions.
         """
-        if self.is_atom_bond_targets:
-            encodings = self.encoder(
-                batch,
-                features_batch,
-                atom_descriptors_batch,
-                atom_features_batch,
-                bond_descriptors_batch,
-                bond_features_batch,
-            )
-            output = self.readout(encodings, constraints_batch, bond_types_batch)
-        else:
-            encodings = self.encoder(
-                batch,
-                features_batch,
-                atom_descriptors_batch,
-                atom_features_batch,
-                bond_descriptors_batch,
-                bond_features_batch,
-            )
-            output = self.readout(encodings)
 
+        if self.character == "atom":
+            if self.is_atom_bond_targets:
+                encodings = self.encoder(
+                    batch,
+                    features_batch,
+                    atom_descriptors_batch,
+                    atom_features_batch,
+                    bond_descriptors_batch,
+                    bond_features_batch,
+                )
+                output = self.readout(encodings, constraints_batch, bond_types_batch)
+            else:
+                encodings, a_scope = self.encoder(
+                    batch,
+                    features_batch,
+                    atom_descriptors_batch,
+                    atom_features_batch,
+                    bond_descriptors_batch,
+                    bond_features_batch,
+                )
+                output = self.readout(encodings)
+            atom_vecs = []
+            for i, (a_start, a_size) in enumerate(a_scope):
+                if a_size == 0:
+                    # mol_vecs.append(self.cached_zero_vector)
+                    pass
+                else:
+                    cur_hiddens = output.narrow(0, a_start, a_size)
+                    atom_vec = cur_hiddens  # (num_atoms, hidden_size)
+
+                    atom_vec = atom_vec.sum(dim=0)
+
+                    atom_vecs.append(atom_vec)
+            outputatom = atom_vecs
+            outputatom = torch.cat(outputatom, dim=0)
+            output = torch.unsqueeze(outputatom, dim=1)
+
+
+        elif self.character == "mol":
+            if self.is_atom_bond_targets:
+                encodings = self.encoder(
+                    batch,
+                    features_batch,
+                    atom_descriptors_batch,
+                    atom_features_batch,
+                    bond_descriptors_batch,
+                    bond_features_batch,
+                )
+                output = self.readout(encodings, constraints_batch, bond_types_batch)
+            else:
+                encodings, a_scope = self.encoder(
+                    batch,
+                    features_batch,
+                    atom_descriptors_batch,
+                    atom_features_batch,
+                    bond_descriptors_batch,
+                    bond_features_batch,
+                )
+                output = self.readout(encodings)
+
+        elif self.character == "hyper":
+            if self.is_atom_bond_targets:
+                encodings = self.encoder(
+                    batch,
+                    features_batch,
+                    atom_descriptors_batch,
+                    atom_features_batch,
+                    bond_descriptors_batch,
+                    bond_features_batch,
+                )
+                output = self.readout(encodings, constraints_batch, bond_types_batch)
+            else:
+                encodingsmol, encodingsatom, a_scope = self.encoder(
+                    batch,
+                    features_batch,
+                    atom_descriptors_batch,
+                    atom_features_batch,
+                    bond_descriptors_batch,
+                    bond_features_batch,
+                )
+                outputmol = self.readout(encodingsmol)
+                outputatom = self.readout(encodingsatom)
+                atom_vecs = []
+                j = 0
+                for i, (a_start, a_size) in enumerate(a_scope):
+                    if a_size == 0:
+                        # mol_vecs.append(self.cached_zero_vector)
+                        pass
+                    else:
+                        cur_hiddens = outputatom.narrow(0, a_start, a_size)
+                        atom_vec = cur_hiddens  # (num_atoms, hidden_size)
+                        atom_vec = atom_vec.sum(dim=0)
+                        atom_vecs.append(atom_vec)
+                outputsatom = atom_vecs
+                outputsatom = torch.cat(outputsatom, dim=0)
+                outputsatom = torch.unsqueeze(outputsatom, dim=1)
+
+                #hyper
+                output = torch.add(outputsatom,outputmol)
+
+        else:
+            raise ValueError(f"Unsupported fingerprint parameter {self.character}.")
         # Don't apply sigmoid during training when using BCEWithLogitsLoss
         if (
             self.classification

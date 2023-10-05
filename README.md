@@ -164,14 +164,15 @@ Datasets from [MoleculeNet](https://moleculenet.org/) and a 450K subset of ChEMB
 ## Training
 
 To train a model, run:
+**if you Installing from source**
 ```
-chemprop_train --data_path <path> --dataset_type <type> --save_dir <dir>
+python train.py --data_path <path> --dataset_type <type> --save_dir <dir> --figureprint <type>
 ```
-where `<path>` is the path to a CSV file containing a dataset, `<type>` is one of [classification, regression, multiclass, spectra] depending on the type of the dataset, and `<dir>` is the directory where model checkpoints will be saved.
+where `<path>` is the path to a CSV file containing a dataset, `<type>` is one of [classification, regression, multiclass, spectra] depending on the type of the dataset, and `<dir>` is the directory where model checkpoints will be saved. figureprint containing "atom", "mol" and "hyper".
 
 For example:
 ```
-chemprop_train --data_path data/tox21.csv --dataset_type classification --save_dir tox21_checkpoints
+python train.py --data_path ./dataset/****.csv --dataset_type regression  --figureprint atom --save_dir ./dataset
 ```
 
 A full list of available command-line arguments can be found in [chemprop/args.py](https://github.com/chemprop/chemprop/blob/master/chemprop/args.py).
